@@ -1,4 +1,4 @@
-## SqlAlchemy 使用
+# SqlAlchemy 使用
 
 ### 简介
 
@@ -18,11 +18,11 @@
             'mysql+pymysql://root:739230854@localhost:3306/test', pool_recycle=3600
         )
         collection = engine.connect()  
-        ```
+    ```
 	- 注意，`create_engine`函数会返回一个引擎的实例。但是，在调用需要使用链接的操作（比如查询）之前，它实际上并不会打开连接。
 
 
-## SQLAlchemy Core
+# SQLAlchemy Core
 
 ### 模式和类型
 
@@ -151,7 +151,7 @@
 
 + 连接对象的`execute`方法不仅可以接受语句，还可以在语句之后接受关键字参数值，在编译语句时，它会向列列表添加每个关键字参数键，并将它们的每个值添加到SQL语句的VALUES部分，但是这种用法不常用，但是他很好的说明了语句在发送到数据库服务器之前是如何编译和组装的。可以通过使用一个字典列表一次插入很多条记录，字典里面包含我们要提交的数据。
     ```python 
-    ins = cookies.insert()
+    ins = cookies.insert()  # 此处的ins也可以这么写 ins = insert(cookies)
     result = connection.execute(
         ins,  # 插入语句任然是execute方法的第一个参数
         cookie_name = 'dack chocolate chip',
@@ -192,7 +192,7 @@ select 需要一个列的列表来选择，为了方便，还可以直接接受�
     from sqlalchemy import select
 
     s = select([cookies])  
-    # print(str(s))  # 任然可以使用str(s)查看数据库看到的SQL语句 
+    # print(str(s))  # 任然可以使用str(s)查看数据库看到的SQL语句，或者直接打印也行
     rp = connection.execute(s)  # rp是ResultProxy的缩写
     # print('rp:',type(rp))  # <sqlalchemy.engine.result.ResultProxy object at 0x7f2dc9f608d0>
     result = rp.fetchall()
@@ -213,7 +213,8 @@ select 需要一个列的列表来选择，为了方便，还可以直接接受�
     result = rp.fetchall()
     ```
 
-### `ResultProxy`
+### ResultProxy
+
 + ResultProxy 是DBAPI游标对象的包装器，主要目的是让语句返回的结果更容易使用和操作，比如，ResultProxy允许使用索引，名称或column对象进行访问，从而额简化了对查询结果的处理
     ```python 
     first_row = result[0]  # 获取ResultProxy的第一行
@@ -251,9 +252,105 @@ select 需要一个列的列表来选择，为了方便，还可以直接接受�
     - 如果想产看结果集中的多个列，可以使用keys()方法来获得列名列表
 
 + 最佳实践，在编写生产代码时，应该遵循如下方针：
-    1. 获取单条记录时，要多用first()方法，尽量不要使用fetchone()和scalar()方法，因为对程序员来说，first方法更加清晰，需要注意，使用first()返回第一条记录后将自动关闭连接
-    2. 尽量使用可迭代对象ResultProxy，而不要用fetchall和fetchone方法，因为前者的内存效率更高，而且我们往往一次只对一条记录进行操作
-    3. 避免使用fetchone方法，因为如果不小心，他会一直让连接处在打开状态，因为使用fetchone会返回一行，并保持光标为打开的状态，以便你做更多的获取调用
-    4. 谨慎使用scalar方法，因为如果查询返回多行多列，就会引发错误，多行多列在测试过程中会经常丢失
+    > 1. 获取单条记录时，要多用first()方法，尽量不要使用fetchone()和scalar()方法，因为对程序员来说，first方法更加清晰，需要注意，使用first()返回第一条记录后将自动关闭连接
+    > 2. 尽量使用可迭代对象ResultProxy，而不要用fetchall和fetchone方法，因为前者的内存效率更高，而且我们往往一次只对一条记录进行操作
+    > 3. 避免使用fetchone方法，因为如果不小心，他会一直让连接处在打开状态，因为使用fetchone会返回一行，并保持光标为打开的状态，以便你做更多的获取调用
+    > 4. 谨慎使用scalar方法，因为如果查询返回多行多列，就会引发错误，多行多列在测试过程中会经常丢失
+
++ 以上的查询方式得到各条记录的所有列，通常我们只需要使用这些列中的一部分。如果额外的列中的数据量很大，就会到导致应用程序运行变慢，消耗的内存远超预期，下面我们可以对查询返回的列数进行限制
+    ```python
+    # 为了限制返回的列数，需要以列表的形式将查询的列传递给select()方法
+    s = select([cookies.c.cookie_name, cookies.c.quantity])
+    rp = connection.execute(s)
+    print(rp.keys())
+    print(rp.first())
+    '''
+    ['cookie_name', 'quantity']
+    ('chocolate chip', 12)
+    '''
+    ```
+    **[ * ] `cookies.c.cookie_name`表示cookies表的Column对象（列对象）cookie_name**
+
+### 排序
+
++ 需要将查找返回的数据按照特性的顺序排列，可以使用`order_by()`语句，默认是升序的方式排序
+    ```python
+    s = select([cookies.c.cookie_name, cookies.c.quantity])
+    s = s.order_by(cookies.c.quantity)  # 在查询后，调用order_by()方法，通过表的列明来指定排列标准
+    rp = connection.execute(s)
+    for cookie in rp:
+        print(f"{cookie.quantity} - {cookie.cookie_name}")   # 通过数据名称进行访问
+    ```
+    现将select语句保存到变量s中，而后向变量s中添加order_by语句，再讲其重新赋值给s变量。这个示例演示了如何以生成式或者分布方式编写语句。当然你也可以把select和order_by放在一起，就像这样`s = select([...]).order_by(...)`合并为一条语句。
+
++ 想要降序或者倒序排列，可以使用`desc()`语句，但是，这需要额外的导包`from sqlalchemy import desc`
+    ```python
+    from sqlalchemy import desc
+
+    s = select([cookies.c.cookie_name, cookies.c.quantity])
+    s = s.order_by(desc(cookies.c.quantity))  # 使用desc()对cookies.c.quantity列进行了包装
+    # 使用print(s)直接打印，或者使用print(str(s))可以看到对应的sql语句为 SELECT cookies.cookie_name, cookies.quantity FROM cookies ORDER BY cookies.cookie_name DESC
+    rp = connection.execute(s)
+    ```
+    除了调用`desc()`函数，`desc()`还可以作为Column对象的方法进行调用，像这样`cookies.c.quantity.desc()`，但是如果在长语句中这样使用，可能会造成阅读困难，所以建议将`desc()`作为函数进行使用。
+
+### 对返回数据的结果条数进行限制
+
++ 虽然可以对ResultProxy使用first()和fetchone()获得一行数据，但是实际查询了所有的结果，使用limit()方法让limit语句成为查询的一部分，对返回的结果集的条数进行限制
+    ```python
+    # 查询两种库存量最少的cookies
+    s = select([cookies.c.cookie_name, cookies.c.quantity])
+    print(type(s))  # <class 'sqlalchemy.sql.selectable.Select'>
+    s = s.order_by(cookies.c.quantity)
+    s = s.limit(2)  # 和order_by一样，都是Select自带的，不需要导包
+    rp = connection.execute(s)
+    print(rp.fetchall())  # [('dack chocolate chip', 1), ('chocolate chip', 12)]
+    print([result.cookie_name for result in rp])  # [] 此时为空，是查不到数据的
+    ```
+    注意最后一行，想再次从ResultProxy对象中获得数据的时候，发现获取不到了，这是因为[ResultProxy](#ResultProxy)对象是DBAPI游标对象的包装器，游标实际上是一种能从包括多条数据记录的结果集中每次提取一条记录的机制。游标充当指针的作用。</br>
+    ResultProxy对象在被使用一次后，会记录位置，
+
+### 内置SQL函数和标签
+
++ 许多数据库设计都包含了SQL函数，这些函数的设计目的是为了让某些操作可以直接在数据库服务器上使用，如SUM函数SqlAlchemy可以利用后端数据库中的SQL函数，常见的函数为SUM以及COUNT，想使用这两个函数，需要导入包 `sqlalchemy.sql.func`模块，这些函数包装在他们要操作的列上
+    ```python
+    # 计算cookie的总数
+    from sqlalchemy.sql import func
+    s = select([func.sum(cookies.c.quantity)]) 
+    print(s)  # SELECT sum(cookies.quantity) AS sum_1 FROM cookies
+    rp = connection.execute(s)
+    print(rp.scalar())  # scalar只返回查询到的第一个数据的最左边的列，且只返回第一行的数据
+    ```
+    **[ * ]建议使用导入func模块的方式，因为直接导入sum可以会引起问题，而且还容易和Python内置的sum函数混淆**
+
++ count计数
+    ```python 
+    s = select([func.count(cookies.c.cookie_name)])
+    print(s)  # SELECT count(cookies.cookie_name) AS count_1 FROM cookies
+    rp = connection.execute(s)
+    recode = rp.first()  # 数据类型为RowProxy，代表查询到的一行数据，若直接打印
+    print(type(recode))  # <class 'sqlalchemy.engine.result.RowProxy'>，但是直接打印的话就是一行数据，以元组的形式打印的
+    print(recode)
+    print(recode.keys())  # 以列表的形式返回查找的数据的各列名组成的列表
+    print(recode.count_1)  
+    ```
+    RequestProxy和RowProxy类型都可以调用keys()方法</br>
+    print(recode.count_1)是以列名的形式打印内容的，因为使用使用COUNT和SUM方法都会以`<func_name>_<position>`的形式起别名，position是调用COUNT和SUM方法的次数，如第二个调用的count()函数得到的别名将是count_2。
+
++ 别名应当清晰、明确，SQLAlchemy提供了label()函数来解决这个问题，可以使用label()函数来为列取个别名
+    ```python
+    s = select([func.count(cookies.c.cookie_name).label('inventory_count')])
+    print(s)  # SELECT count(cookies.cookie_name) AS inventory_count FROM cookies
+    rp = connection.execute(s)
+    print(rp.first().keys())  # ['inventory_count']
+    ```
+    只需要在更改的列对象上调用label()函数即可</br>
+    这意味着，我们在查找原有列名时，也可以对返回的列明取别名，像这样`s = select([cookies.c.cookie_name.label('cookie_name_count')])`</br>
+    **[ * ]除了fitchall得到的是list，其他的方法得到的行数据都是RowProxy类型，当然fitchall()得到的是行数据的集合，所以列表中的每一项都是RowProxy类型.**
+
+
+
+
+
 
 
