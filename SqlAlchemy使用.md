@@ -92,7 +92,7 @@
     ```
 
 
-### 插入数据
+## 插入数据
 
 + `insert`插入
     ```python 
@@ -117,6 +117,7 @@
     'cookie_sku': 'CC01', 'quantity': '12', 'unit_cost': '0.50'}
     '''
     ```
+    在SQL语句中，我们提供的值被替换为`:列名`，ins对象的compile()方法返回一个SQLCompiler对象，该对象允许我们通过params属性访问隋查询一起发送的实际参数。
 
 + 执行插入语句，执行前需要先添加引擎并连接
     ```python 
@@ -184,7 +185,7 @@
     result = connection.execute(ins, inventory_list)
     ```
 
-### 查找数据
+## 查找数据
 
 + `select`查询:</br>
 select 需要一个列的列表来选择，为了方便，还可以直接接受一个Table实例（这里的cookies表），则此时选中该表中的所有的内容
@@ -347,6 +348,133 @@ select 需要一个列的列表来选择，为了方便，还可以直接接受�
     只需要在更改的列对象上调用label()函数即可</br>
     这意味着，我们在查找原有列名时，也可以对返回的列明取别名，像这样`s = select([cookies.c.cookie_name.label('cookie_name_count')])`</br>
     **[ * ]除了fitchall得到的是list，其他的方法得到的行数据都是RowProxy类型，当然fitchall()得到的是行数据的集合，所以列表中的每一项都是RowProxy类型.**
+
+### 过滤
++ 过滤，对查询进行过滤是通过where()语句来完成，可以把多个where()子句接在一起使用，功能就像传统的SQL语句中的AND一样
+    ```python
+    s = select([cookies]).where(cookies.c.cookie_name == "chocolate chip")
+    print(s)  # SELECT cookies.cookie_id, cookies.cookie_name, cookies.cookie_recipe_url, cookies.cookie_sku, cookies.quantity, cookies.unit_cost FROM cookies WHERE cookies.cookie_name = :cookie_name_1
+    print(s.compile().params)  # 查询发送的实际参数
+    rp = connection.execute(s)  
+    recode = rp.first()
+    print(type(recode))
+    print(recode.items())  # [('cookie_id', 5), ('cookie_name', 'chocolate chip'), ('cookie_recipe_url', 'http://xxx'), ('cookie_sku', 'CC01'), ('quantity', 12), ('unit_cost', Decimal('0.50'))]
+    ```
+    RowProxy对象的items()方法返回得到由列名和值组成的元组列表
+
++ like模糊查询，查询包含chocolate的cookie名
+    ```python 
+    s = select([cookies]).where(cookies.c.cookie_name.like('%chocolate%'))
+    print(s)  # SELECT cookies.cookie_id, cookies.cookie_name, cookies.cookie_recipe_url, cookies.cookie_sku, cookies.quantity, cookies.unit_cost FROM cookies WHERE cookies.cookie_name LIKE :cookie_name_1
+    ```
+
+### ClauseElement
++ ClauseElement，是在子句中使用的实体，一般是表中的列。不过，与列不同的是ClauseElement拥有许多额外的功能，如之前我们调用的like()方法，此外还有许多额外的方法。
+    方法 | 用途
+    :--|:--:
+    between(cleft, cright) | 查找cleft和cright之间的内容
+    concat(column_two)|连接列
+    destinct()|查找列的唯一值
+    in_([list]) | 查找列在列表中的位置
+    is_(None) | 查找列None的位置（通常用于检查Null和None）
+    contains(string)| 查找包含string的列（区分大小写）
+    endswith(string)| 查找以string结尾的列（区分大小写）
+    like(string)| 查找与string匹配的列（区分大小写）
+    startwith(string)| 查找以string开头的列（区分大小写）
+    ilike(string)| 查找与string匹配的列（不区分大小写）
+    以上这些方法都有相反的方法，例如notlike()和notin_()。not<方法>这种命名方式约定的唯一例外是不带下划线的isnot()方法。
+
+### 除了ClauseElement中的这些方法之外，还可以在where()语句中使用运算符
++ 除了使用是否等于值，以及CalauseElement的方法之外，还可以使用运算符。SQLAlchemy针对大多数的Python运算符都做了重载，包括标准的比较运算符（==、！=、<、>、<=、=>），他们的功能和在Python中一样。在与None比较时，==被重载为IS NULL语句。算数运算符（+、-、*、/和%）还可以用来独立于数据库的字符串做连接处理。
+
++ 使用+连接字符串
+    ```python
+    s = select([cookies.c.cookie_name, 'SKU-' + cookies.c.cookie_sku])
+    print(s)  # SELECT cookies.cookie_name, :cookie_sku_1 || cookies.cookie_sku AS anon_1 FROM cookies
+    for row in connection.execute(s):
+        print(row)
+    '''
+    ('chocolate chip', 'SKU-CC01')
+    ('dack chocolate chip', 'SKU-CC02')
+    ('peanut butter', 'SKU-PB01')
+    ('oatmeal raisin', 'SKU-EWW01')
+    ('chocolate chip', 'SKU-CC01')
+    ('peanut butter', 'SKU-PB01')
+    ('oatmeal raisin', 'SKU-EWW01')
+    '''
+    rp =  connection.execute(s)
+    print(rp.keys())  # ['cookie_name', 'anon_1']
+    ```
+    在sql中，`||`为连接符
+
++ 运算符的另外一种用法是根据多个列来计算值
+    ```python
+    # 计算各种cookie的库存价值
+    from sqlalchemy import cast, Numeric
+    s = select([cookies.c.cookie_name,
+            cast((cookies.c.quantity * cookies.c.unit_cost),
+            Numeric(12,1)).label('inv_cost')])
+    print(s)  # SELECT cookies.cookie_name, CAST(cookies.quantity * cookies.unit_cost AS NUMERIC(12,1)) AS inv_cost FROM cookies
+    for row in connection.execute(s):
+        print("{} - {}".format(row.cookie_name, row.inv_cost))
+    """
+    chocolate chip - 6.0
+    dack chocolate chip - 0.8
+    peanut butter - 6.0
+    oatmeal raisin - 100.0
+    chocolate chip - 6.0
+    peanut butter - 6.0
+    oatmeal raisin - 100.0
+    """
+    ```
+    cast()是另一个允许做类型转换的函数，使用方式是cast(数据,转换类型)，这里如果不使用cast，即使用
+    ```python
+    s = select([cookies.c.cookie_name,
+                (cookies.c.quantity * cookies.c.unit_cost).label('inv_cost')])
+    ```
+    也是可以获得相应的数据的，此时我们可以在python语句中对数据类型进行强制转换
+    ```python
+    print("{} - {:.2f}".format(row.cookie_name, row.inv_cost))
+    ```
+    显示的效果是一样的。
+
++ 布尔运算符： SQLAlchemy还支持布尔运算符AND、OR和NOT，他们用位运算符（&、|和~）来表示。受Python运算符优先级规则的影响，应当尽量使用连接词，而不要使用这些重载的运算符
+
++ 连接词：and_()、or_()、not_()。为了实现某种期望的效果，我们既可以把多个where()子句连接在一起，也可以使用连接词来实现，而且使用连接词的可读性更好，功能性更强。
+    ```python
+    from sqlalchemy import and_,or_,not_
+
+    s = select([cookies]).where(
+        and_(cookies.c.quantity > 23,
+            cookies.c.unit_cost < 0.40
+        )
+    )
+    '''
+    # 等价的版本（使用布尔运算符--注意优先级）
+    s = select([cookies]).where(
+        (cookies.c.quantity > 23) &
+            (cookies.c.unit_cost < 0.40)
+        )
+    '''
+    print(s)  # SELECT cookies.cookie_id, cookies.cookie_name, cookies.cookie_recipe_url, cookies.cookie_sku, cookies.quantity, cookies.unit_cost FROM cookies WHERE cookies.quantity > :quantity_1 AND cookies.unit_cost < :unit_cost_1 
+    for row in connection.execute(s):
+        print(row.cookie_name)
+    ```
++ 配合ClauseElement使用
+    ```python
+    s = select([cookies]).where(
+        or_(
+            cookies.c.quantity.between(10,50),
+            cookies.c.cookie_name.contains('chip')  # 查询包含'chip'的项
+        )
+    )
+
+    ```
+## 更新数据
++ update()方法和之前的insert()方法相似，语法几乎一致，但是update()还可以指定一个where()子句，用来指出要更新的行。
+
+
+## 删除数据
 
 
 
