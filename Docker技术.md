@@ -48,7 +48,7 @@ Docker解决了运行环境和配置问题软件容器，方便做持续继承�
 
 + 安装，见官方文档：https://docs.docker.com/install/linux/docker-ce/centos/
 ## 使用
-+ 安装完成后使用`sudo systemctl start docker`启动docker服务
++ 安装完成后使用`sudo systemctl start docker`启动docker服务，一定要先启动docker服务，尤其是在重启宿主机后，docker服务没有启动。
 + 推荐使用阿里云镜像加速：注册阿里云，搜索容器镜像服务，按照提示进行申请
 + 配置完阿里云镜像后，使用`docker info`命令查看`Registry Mirrors`项是否是阿里云镜像的地址
 + 通过运行hello-world镜像来验证是否正确安装了Docker Engine-Community 。运行`docker run hello-world`命令。
@@ -76,5 +76,124 @@ Docker解决了运行环境和配置问题软件容器，方便做持续继承�
 + docker info，对Docker信息的概括
 + docker version，查看Docker的版本
 + docker --help，Docker命令的帮助
++ docker镜像命令
+    - docker images：列出<font color='red'>本地</font>主机上所有的镜像，通过在最后指定镜像的名字，可以查看相应镜像的名字
+        ```linux
+        REPOSITORY       TAG           IMAGE ID         CREATED           SIZE
+        hello-world      latest        fce289e99eb9     11 months ago     1.84kB
+        ```
+        各项的说明：
+        REPOSITORY：镜像的仓库源
+        TAG：镜像的标签
+        IMAGE ID：镜像ID
+        CREATED：镜像创建的时间
+        SIZE：镜像大小
+        同一个仓库源下可以有多个TAG，代表这个仓库源的不同版本，我们可以使用REPOSITORY:TAG来定义不同的镜像。如果不指定一个镜像的版本标签，例如你只使用ubuntu，docker将默认使用ubuntu:latest镜像。
+        OPTIONS说明：
+            -a：列出本地所有的镜像（含中间映像层）
+            -q：只显示镜像ID
+            --digests：显示镜像的摘要信息
+            --no-trunc：显示完整的镜像信息
+            -qa：组合命令，显示所有的本地镜像的ID
+    
+    - docker search 镜像名： 从[Docker Hub](https://hub.docker.com)中查找某个镜像（尽管之前配置了阿里云镜像，但是这里查找镜像还是从Docker Hub上查找，拉取的时候从阿里云上拉）
+        OPTIONS说明：
+            -s；指定显示STARTS数不小于某个值的镜像，如docker search -s 30 tomcat指定STARTS超过30的Tomcat镜像
+            --no-trunc：显示完整的信息，不要省略，docker search -s 30 --no-trunc tomcat
+            --automated：只列出automated build（自动构建）类型的镜像，即列出AUTOMATED为ok的镜像
 
+    - docker pull 镜像名：下载镜像，可以在镜像名后添加`:版本号`来下载指定版本的镜像，默认不添加的时候下载latest的版本
 
+    - docker rmi 镜像名[镜像ID]：删除镜像，多个镜像时，默认不添加时版本是删除latest版本的。docker rmi -f 镜像名强制删除
+        删除多个：docker rmi 镜像名1[镜像ID] 镜像名2[镜像ID]
+        删除全部：docker rmi -f $(docker images -qa)，docker images -qa为组合命令，显示所有的镜像的ID
+
++ docker容器命令（以centos镜像为例）
+    - 新建并启动容器：docker run [OPTIONS] IMAGES [COMMAND] 
+        OPTIONS说明：
+            --name='容器新名字'：为容器指定一个新的名字
+            -d：后台运行容器，并返回容器ID，也即启动守护式容器
+            -i：以交互模式运行容器，通常与-t同时使用；
+            -t：为容器重新分配一个伪输入终端，通常与-i同时使用； docker run -it 镜像 实际是得到一个容器的终端进行交互
+            -P：随机端口映射
+            -p：指定端口映射，有以下四种格式
+                ip:hostPort:containerPort
+                ip::containerPort
+                hostPort:containerPort
+                containerPort
+            注意，run 镜像：版本号，版本号如果没有，则默认是latest版本的，所以若下载的不是latest版本，你不添加对应的版本号，则会去下载latest版本并运行。
+        COMMAND说明：
+            该项目是可选项，可以指定运行容器时附加运行的指令，使用`docker run -it 镜像`创建实例的时候，即使不指定COMMAND为`/bin/bash`，默认不写该项时也是使用的这个。不使用-it参数，或者创建时没有指定一个前台运行的进程，创建的容器都会在创建之后由于没有前台进程而被自动kill掉。**每个镜像都设置了其容器默认执行的相应的COMMAND，使得容器在被创建的时候，如果没有手动执行COMMAND，则会自动调用相应的默认的COMMAND指令，如tomcat镜像设置了其容器的默认COMMAND为"catalina.sh run"，这样tomcat容器一创建完成就会调用这个命令，开始执行tomcat服务器。**
+        **使用docker run [OPTIONS] IMAGES [COMMAND]时的[OPTIONS]很重要，像对于centos这种，由于其没有默认的前台进程，如果使用-d作为守护式进程启动的话，由于docker本身的问题，这个容器一被创建就会由于没有前台进程而会被自动kill，且使用docker start也无法启动该容器，所以除非有特殊需要，以后台运行时要指定一个前台进程，或者就使用-it以交互式的方式运行**
+        疑问：为什么使用`docker run -d centos`创建的容器，没有添加COMMAD时，会被kill，但是使用docker ps查看时显示COMMADN为`/bin/bash`，自带的？，那为什么又会被kill呢。</br>*这是docker本身的问题，Docker容器需要运行一个使其保持活动状态的进程。只要命令继续运行，容器将继续运行。而centos自带的/bin/bash会一执行玩就结束了，所以没有前台进程，该容器就被终止了，所以需要能使容器长时间挂起的方法，即所以可以1.执行一个死循环2.使用`docker run -dit centos`即使用-d启动守护式容器的同时，使用-it为其分配一个交互式伪终端即可*
+
+    - 查看docker内运行的进程：docker ps 默认显示当前正在运行的容器
+        OPTIONS说明：
+            -a：列出当前所有正在运行的容器+历史上运行过的
+            -l：显示最近创建的容器
+            -n：显示最近n个创建的容器
+            -q：静默模式，只显示容器编号
+            --no-trunc：不截断输出
+    - 退出容器：
+        exit：容器停止退出
+        ctrl+P+Q：容器不停止退出
+    - 启动容器：docker start 容器ID或者容器名（若没有使用docker run --name 设置别名，则使用的的是默认的容器名），启动成功后会返回对应的容器ID，启动的容器执行的COMMAND为使用docker run命令创建容器时执行的COMMAND,<font color='red'>但是可以通过`docker exec -it 容器ID bashShell`命令以命令行形式进入容器进行交互，如/bin/bash就会打开一个终端。</font>
+    - 重启容器：docker restart 容器ID或者容器名，重启成功后会返回对应的容器ID
+    - 停止容器：docker stop 容器ID或者容器名，关闭成功后会返回对应的容器ID
+    - 强制停止：docker kill 容器ID或者容器名
+    - 删除已停止的容器：docker rm 容器ID或者容器名，一定要是停止的，否则会报冲突
+    - 删除没有停止的容器：docker rm -f 容器ID或者容器名，先关闭容器然后再删除
+    - 一次性删除多个容器
+        docker rm -f $(docker ps -a -q)
+        docker ps -a -q | xargs docker rm
+    - 灵活运用组合命令，如启动最近刚创建的容器，使用`docker start $(docker ps -lq)`，解释：docker start需要容器ID，docker ps -lq添加了-q，使其只返回容器ID.
+
++ 重要
+    - 启动守护式容器：docker run -d 镜像名，注意该命令没有指定创建容器要执行的命令COMMAND（且该镜像创建的容器默认的COMMAND不是一个长久的前台进程，如centos镜像的默认COMMAND为`"/bin/bash"`会在一执行玩就结束了，但是tomcat的COMMADN为`"catalina.sh run"`这个前台进程会一直执行并等待），此时使用docker ps发现没有正在运行的容器，因为Docker容器后台运行必须有一个前台进程，容器如果运行的不是那些一直挂起的命令（如运行top，tail），就会自动退出。<font color='red'>所以最佳的解决方案是，将你要运行的程序以前台的形式运行。</font>
+    - 查看容器日志：docker logs -f -t --tail 容器ID
+        -t：加入时间戳
+        -f：跟随最新的日志打印
+        --tail 数字：显示最后的多少条
+        所谓日志，就是docker容器终端的操作以及输出，直接使用`docker run 镜像`或者`docker run -d 镜像的`方式创建的容器会直接停止（即使用docker ps是无法查看的，即没有再运行），原因是因为docker在后台启动后，没有前台交互，无事可做，所以自动kill了，但是在创建时添加参数如`docker run -d centos /bin/sh -c "while true;do echo hello skylor;sleep 2;done"`这条命令的作用是创建centos的容器并且在容器中不断输出hello skylor，这样docker容器就与前台有了交互，就不会自动kill了。或者使用-d启动的容器，会后台打印日志，如tomcat容器，这种容器使用-d以后台启动的方式启动后就不会直接被kill掉。另外，使用`docker start 容器ID`启动已经创建的容器，没有问题。需要注意的是，这样创建的容器，在使用`docker start 容器ID`方式启动后容器会继续运行这个命令。
+    - 查看容器内运行的进程：docker top 容器ID，docker容器本质是就是运行的一个精简版的linux系统，所以大部分的linux命令和docker是通用的，有一些命令不行，另外由于是精简版，比如centos就没有vim，只有自带的vi，想使用vim，需要手动下载。
+    - 查看容器内部的细节：docker inspect 容器ID，能够查看所有存在的容器的内部信息，不仅是正在运行的容器。以键值对的形式展示内部细节。
+    - 进入<font color="red">正在运行的</font>容器并以命令行交互，注意是正在运行的容器，所以容器若是关闭的，需使用`docker start 容器ID`命令进行启动容器。
+        * docker exec -it 容器ID bashShell， bashShell可以直接是操作命令，这样执行后，会直接放回命令的执行结果，而如果是/bon/bash，则会新开一个容器的终端并进入。
+        * 重新进入docker attach 容器ID，此时进入容器执行的默认的COMMAND，因为每个镜像容器都有默认的COMMAND，在使用docker run创建容器的时候若是没有指定COMMAND，则会启动默认的命令，所以
+        * 以上两种方式的区别： attach直接进入容器启动命令的终端，不会启动新的进程，exec是在容器中打开新的终端，并且可以启动新的进程。
+        **推荐使用docker exec -it 容器ID bashShell的方式，因为这样会再新打开一个shell进行交互，使用exit退出时仅仅退出了新开启的shell，而不会由于退出原始的shell而导致容器被关闭**
+    - 将容器内的文件拷贝到主机上，docker cp 容器ID：容器的内路径 目的主机路径
+
+### Docker镜像
+- 是什么，镜像时一种轻量级、可执行的独立软件包，用来打包软件运行环境和基于运行环境开发的软件，它包含运行某个软件所需的内容，包括代码、运行时、库、环境变量和配置文件。
+    * UnionFS联合文件系统：Union文件系统是一种分层、轻量级并且高性能的文件系统，它支持对文件系统的修改作为一次提交来一层层叠加，同时可以将不同目录挂载到同一个虚拟文件系统下。Union文件系统实Docker镜像的基础，镜像可以通过分层来进行继承，基于基础镜像（没有父镜像），可以制作各种具体的应用镜像。
+        特性：一次同时加载多个文件系统，但从外面看起来，只能看到一个文件系统，联合加载会把各种文件系统叠加起来，这样最终的文件系统会包含所有底层的文件和目录。
+    * Docker镜像加载原理
+    * 分层的镜像，一个镜像是由好几层各种的其他的镜像叠加而成，当多个镜像都有相同的镜像层时只需保存一个。
+    * 为什么Docker镜像要采用这种分层结构呢：共享资源，比如说，有多个镜像都从相同的base镜像构建而来，那么宿主机只需在磁盘上保存一个base镜像，同时内存中也只需要加载一份base镜像，就可以为所有的容器服务了。而且镜像的每一层都可以被共享。
+
+- 特点：镜像都是只读的，当容器启动时，一个新的可写层被加载到镜像的顶部，这一层通常被称作“容器层”，“容器层”之下都叫“镜像层”。
+
+- Docker镜像commit操作补充
+    * docker commit 提交容器副本使之成为一个新的镜像
+    * docker commit -m="提交的描述信息" -a="作者" 容器ID 要创建的目标镜像名：[标签名]
+
+### Docker容器数据卷
++ 创建的容器对象只是关闭，没有删除的情况下，容器内的内容是不会丢失的，但是一旦容器被删除，则保存的内容就会丢失（当然也可以是使用docker commit生成一个新的镜像，使得数据成为镜像的一一部分保存下来），此时就需要使用Docker容器数据卷。
++ 能干什么：容器间继承和共享数据，做数据的持久化，类似redis中的rdb和aof文件
++ 是什么：卷就是目录或者文件，存在于一个或多个容器中，由docker挂载到容器，但不属于联合文件系统，因此能够绕过Union File System提供一些用于持续存储或共享数据的特性，卷的设计目的就是数据的持久化，完全能独立于容器的生存周期，因此Docker不会在容器删除时，删除其挂载的数据卷（类似于外置的活动存储器）
+    特点： 
+        1. 数据卷可在容器之间共享或重用数据
+        2. 数据卷中的更改可以直接生效
+        3. 数据卷中的更改不会包含在镜像的更新中
+        4. 数据卷的生命周期一直持续到没有容器使用它为止
++ 数据卷：容器内添加
+    - 直接命令添加
+        * 命令：`docker run -it -v /宿主机（即本地）绝对路径目录:/容器内目录  镜像名`，/宿主机（即本地）绝对路径目录和容器内目录都可以先不存在，而是由docker创建
+        * 查看数据卷是否挂载成功：使用`docker inspect 容器ID`查看`Volumes`和`VolumesRW`可以看到卷路径
+        * 容器和宿主机之间数据共享：在容器或主机的任意一方的共享目录中的所有操作都是共享的，文件属性也是一致的，任意一方的修改，另外一方都能看到并使用。
+        * 容器停止退出后，主机修改后数据是否同步：任然同步，内容是一致的
+        * 命令（带权限）
+    - DockerFile添加
+    - 备注   
++ 数据卷容器
