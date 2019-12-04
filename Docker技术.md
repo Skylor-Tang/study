@@ -219,7 +219,7 @@ Docker解决了运行环境和配置问题软件容器，方便做持续继承�
 + 特点：镜像都是只读的，当容器启动时，一个新的可写层被加载到镜像的顶部，这一层通常被称作“容器层”，“容器层”之下都叫“镜像层”。
 
 + Docker镜像commit操作补充
-    - docker commit 提交容器副本使之成为一个新的镜像
+    - docker commit 提交<font color='red'>容器</font>副本使之成为一个新的镜像
 
     - docker commit -m="提交的描述信息" -a="作者" 容器ID 要创建的目标镜像名：[标签名]
 
@@ -238,7 +238,7 @@ Docker解决了运行环境和配置问题软件容器，方便做持续继承�
     
 + 数据卷：容器内添加
     - 直接命令添加
-        * 命令：`docker run -it -v /宿主机（即本地）绝对路径目录:/容器内目录  镜像名`，/宿主机（即本地）绝对路径目录和容器内目录都可以先不存在，而是由docker创建
+        * 命令：`docker run -it -v /宿主机（即本地）绝对路径目录:/容器内目录  镜像名`，/宿主机（即本地）绝对路径目录和容器内目录都可以先不存在，而是由docker创建，如果 -v 之后只有一个路径，则此路径为容器内目录，而宿主机目录则由docker默认创建，目录为``/var/lib/docker/volumes/`下。
         * 查看数据卷是否挂载成功：使用`docker inspect 容器ID`查看`Volumes`和`VolumesRW`可以看到卷路径
         * 容器和宿主机之间数据共享：在容器或主机的任意一方的共享目录中的所有操作都是共享的，文件属性也是一致的，任意一方的修改，另外一方都能看到并使用。
         * 容器停止退出后，主机修改后数据是否同步：任然同步，内容是一致的
@@ -343,7 +343,7 @@ Docker解决了运行环境和配置问题软件容器，方便做持续继承�
 
     - ENTRYPOINT：指定一个容器启动时要运行的命令
         * ENTRYPOINT的目的和CMD一样，都是在指定容器启动程序及参数
-        * 和CMD的区别在，CMD会被docker run之后的参数替换，但是使用ENTRYPOINT时，docker run之后添加的命令不会覆盖掉ENTRYPOINT，而是变为追加模式，即执行完了ENTRYPOINT，在执行docker run 设置的命令。
+        * 和CMD的区别在，CMD会被docker run之后的参数替换，但是使用ENTRYPOINT时，docker run之后添加的命令不会覆盖掉ENTRYPOINT，而是变为追加模式，即将原有的命令和docker run新添加的命令组成一个新的命令去执行。
 
     - ONBUILD：当构建一个被继承的Dockerfile时运行命令，父镜像在被子镜像继承后父镜像的onbuild被触发，是一个触发器。
 
@@ -379,5 +379,70 @@ Docker解决了运行环境和配置问题软件容器，方便做持续继承�
         使用`docker history 镜像名`查看镜像变更历史
 
     - CMD/ENTRYPOINT 镜像案例
+        * 都是指定一个容器启动时要运行的命令
+        * CMD: Dockerfile中可以有多个CMD指令，但只有最后一个生效，CMD会被docker run之后的参数替换
+        * ENTRYPOINT: 相比CMD，使用ENTRYPOINT时，docker run之后添加的命令不会覆盖掉ENTRYPOINT，而是变为追加模式，即将原有的命令和docker run新添加的命令组成一个新的命令去执行。
+
     
     - 自定义镜像 Tomcat9
+        * 建立本地Dockerfile文件夹，`mkdir -p /root/mydockerfile/tomcat9`
+        * 在上述目录下touch c.txt
+        * 将jdk和tomcat安装的压缩包拷贝进上一步的目录中，`apache-tomcat-9.0.8.tar.gz`,`jdk-8u171-linux-x64.tar.gz`
+        * 在`/root/mydockerfile/tomcat9`目录下新建Dockerfile文件
+            ```
+            FROM  centos
+            MAINTAINER skylor<tang1996mei@126,com>
+
+            # 把宿主机当前上下文的copy.txt文件拷贝到容器/usr/local/路径下
+            COPY copy.txt /usr/local/cincontainer.txt
+
+            # 把java和tomcat添加到容器中
+            ADD apache-tomcat-9.0.8.tar.gz /usr/local/
+            ADD jdk-8u171-linux-x64.tar.gz /usr/local/
+
+            # 安装vim
+            RUN yum -y install vim
+
+            # 设置工作访问时候的WORKDIR路径，登录落脚点
+            ENV MYPATH /usr/local
+            WORKDIR $MYPATH
+
+            # 配置java和tomcat环境变量
+            ENV JAVA_HOME /usr/local/jdk1.8.0_171
+            ENV CLASSPATH $JAVA_HOME/lib/dt.jar:$JAVA_HOME/lib/tools.jar
+            ENV CATALINA_HOME /usr/local/apache-tomcat-9.0.8
+            ENV CATALINA_BASE /usr/local/apache-tomcat-9.0.8
+            ENV PATH $PATH:$JAVA_HOME/bin:$CATALINA_HOME/lib:$CATALINA_HOME/bin
+            
+            # 容器运行时监听端口
+            EXPOSE 8080
+            
+            # 启动时运行tomcat
+            # ENTRYPOINT ["/usr/local/apache-tomcat-9.0.8/bin/startup.sh"]
+            # CMD ["/usr/local/apache-tomcat-9.0.8/bin/catalina.sh", "run"]
+            CMD /usr/local/apache-tomcat-9.0.8/bin/startup.sh && tail -F /usr/local/apache-tomcat-9.0.8/bin/logs/catalina.out
+
+            ```
+        * 构建： 在当前目录下`docker build -t centos_tomcat9 .`
+        * run： `docker run -d -p 9080:8080 -v /hostdatavolume/centos_tomcat9/test:/usr/local/atache-tomcat-9.0.8/webapps/test -v /hostdatavolume/centos_tomcat9/tomcatlogs/:/usr/local/apache-tomcat-9.0.8/logs --privileged=true --name ct9 centos_tomcat9`
+
+### 几个基本镜像的使用
++ mysql镜像:
+    - run命令： `docker run -p 12345:3306 --name mysql -v /hostdatavolume/mysql5.6/conf:/etc/mysql/conf.d -v /hostdatavolume/mysql5.6/logs:/logs -v /hostdatavolume/mysql5.6/data:/var/lib/mysql -e MYSQL_ROOT_PASSWORD=123456 -d mysql:5.6`</br>
+    -e MYSQL_ROOT_PASSWORD=123456是对mysql的民吗进行设置
+
++ redis镜像：
+    - run命令： `docker run -p 6379:6379 -v /hostdatavolume/redis3.2/data:/data -v /hostdatavolume/redis3.2/conf/redis.conf:/usr/local/etc/redis/redis.conf -d redis:3.2 redis-server /usr/local/etc/redis/redis.conf --appendonly yes`</br>
+    `redis-server /usr/local/etc/redis/redis.conf --appendonly yes--appendonly yes`是redis用于配置数据持久化的
+
++ 说明： 需要使用端口的镜像，创建容器的时候都需要做端口映射，`-p 宿主机端口：容器使用端口`会将端口映射到本地的端口，使用`- P`则会随机分配一个端口。
+
+
+### 本地镜像发布到阿里云
++ 使用docker commit命令提交一个本地的修改容器为新的镜像
+
+    - docker commit 提交<font color='red'>容器</font>副本使之成为一个新的镜像
+
+    - docker commit -m="提交的描述信息" -a="作者" 容器ID 要创建的目标镜像名：[标签名]
+    
++ 阿里云提供了完善的提交方案
